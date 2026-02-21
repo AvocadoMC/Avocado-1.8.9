@@ -44,10 +44,10 @@ class ScoreboardElement(
     private val backgroundColor by color("BackgroundColor", Color.BLACK.withAlpha(128))
     private val roundedRectRadius by float("Rounded-Radius", 3F, 0F..5F)
 
-    private val rect by boolean("Rect", true)
+    private val rect by boolean("Rect", false)
     private val rectColor = color("RectangleColor", Color(0, 111, 255)) { rect }
 
-    private val drawRectOnTitle by boolean("DrawRectOnTitle", true)
+    private val drawRectOnTitle by boolean("DrawRectOnTitle", false)
     private val titleRectColor by color("TitleRectColor", Color.BLACK.withAlpha(128)) { drawRectOnTitle }
     private val titleRectExtraHeight by int("TitleRectExtraHeight", 5, 0..20) { drawRectOnTitle }
     private val rectHeightPadding by int("TitleRectHeightPadding", 0, 0..10) { drawRectOnTitle }
@@ -55,7 +55,7 @@ class ScoreboardElement(
     private val serverIp by choices("ServerIP", arrayOf("Normal", "None", "Client", "Website"), "Normal")
     private val number by boolean("Number", false)
     private val shadow by boolean("Shadow", false)
-    private val font by font("Font", Fonts.fontSemibold35)
+    private val font by font("Font", Fonts.mc.fontRendererObj)
 
     /**
      * Draw element
