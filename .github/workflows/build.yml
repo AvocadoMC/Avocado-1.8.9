@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 8
+          cache: gradle
+
+      - name: Grant permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build project
+        run: ./gradlew setupCiWorkspace build
+
+      - name: Show build output
+        run: ls -l build/libs
+
+      - name: Rename jar
+        run: mv build/libs/*.jar build/libs/Avocado-build.jar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Avocado
+          path: build/libs/Avocado-build.jar
