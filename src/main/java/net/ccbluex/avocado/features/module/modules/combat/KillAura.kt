@@ -296,8 +296,8 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     private val aimPointBoxSize by float("AimPointBoxSize", 0.1f, 0f..0.2F) { renderAimPointBox }.subjective()
 
     // Circle options
-    private val circleStartColor by color("CircleStartColor", Color.BLUE) { mark == "Circle" }.subjective()
-    private val circleEndColor by color("CircleEndColor", Color.CYAN.withAlpha(0)) { mark == "Circle" }.subjective()
+    private val circleStartColor by color("CircleStartColor", Color.RED) { mark == "Circle" }.subjective()
+    private val circleEndColor by color("CircleEndColor", Color.PINK.withAlpha(0)) { mark == "Circle" }.subjective()
     private val fillInnerCircle by boolean("FillInnerCircle", false) { mark == "Circle" }.subjective()
     private val withHeight by boolean("WithHeight", true) { mark == "Circle" }.subjective()
     private val animateHeight by boolean("AnimateHeight", false) { withHeight }.subjective()
