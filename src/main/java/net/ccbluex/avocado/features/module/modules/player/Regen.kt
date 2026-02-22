@@ -13,20 +13,33 @@ import net.ccbluex.avocado.utils.client.PacketUtils.sendPacket
 import net.ccbluex.avocado.utils.extensions.isMoving
 import net.ccbluex.avocado.utils.movement.MovementUtils.serverOnGround
 import net.ccbluex.avocado.utils.timing.MSTimer
+import net.minecraft.network.play.client.C00PacketKeepAlive
 import net.minecraft.network.play.client.C03PacketPlayer
+import net.minecraft.network.play.client.C03PacketPlayer.*
 import net.minecraft.potion.Potion
 
 object Regen : Module("Regen", Category.PLAYER) {
 
-    private val mode by choices("Mode", arrayOf("Vanilla", "Spartan"), "Vanilla")
+    private val mode by choices(
+        "Mode",
+        arrayOf(
+            "Vanilla",
+            "PacketKeepAlive",
+            "AAC4NoFire",
+            "OldSpartan",
+            "NewSpartan",
+            "1.17Grim",
+            "C04Packet",
+            "C05Packet",
+        ),
+        "Vanilla"
+    )
     private val speed by int("Speed", 100, 1..100) { mode == "Vanilla" }
 
-    private val delay by int("Delay", 0, 0..10000)
+    private val delay by int("Delay", 0, 0..100)
     private val health by int("Health", 18, 0..20)
-    private val food by int("Food", 18, 0..20)
-
-    private val noAir by boolean("NoAir", false)
-    private val potionEffect by boolean("PotionEffect", false)
+    private val noAir by boolean("NoAir", true)
+    private val potionEffect by boolean("PotionEffect", true)
 
     private val timer = MSTimer()
 
@@ -44,7 +57,6 @@ object Regen : Module("Regen", Category.PLAYER) {
         if (
             !mc.playerController.gameIsSurvivalOrAdventure()
             || noAir && !serverOnGround
-            || thePlayer.foodStats.foodLevel <= food
             || !thePlayer.isEntityAlive
             || thePlayer.health >= health
             || (potionEffect && !thePlayer.isPotionActive(Potion.regeneration))
@@ -58,7 +70,32 @@ object Regen : Module("Regen", Category.PLAYER) {
                 }
             }
 
-            "spartan" -> {
+            "packetkeepalive" -> {
+                repeat(speed) {
+                    sendPacket(C03PacketPlayer(serverOnGround))
+                    sendPacket(C00PacketKeepAlive())
+                }
+            }
+
+            "aac4nofire" -> {
+                if (thePlayer.isBurning && thePlayer.ticksExisted % 10 == 0) {
+                    repeat(35) {
+                        sendPacket(C03PacketPlayer(true))
+                    }
+                }
+            }
+
+            "oldspartan" -> {
+                if (thePlayer.isMoving || !thePlayer.onGround) {
+                    return@handler
+                }
+
+                repeat(9) {
+                    sendPacket(C03PacketPlayer(thePlayer.onGround))
+                }
+            }
+
+            "newspartan" -> {
                 if (!thePlayer.isMoving && serverOnGround) {
                     repeat(9) {
                         sendPacket(C03PacketPlayer(serverOnGround))
@@ -66,6 +103,46 @@ object Regen : Module("Regen", Category.PLAYER) {
 
                     mc.timer.timerSpeed = 0.45F
                     resetTimer = true
+                }
+            }
+
+            "c04packet" -> {
+                repeat(speed) {
+                    sendPacket(
+                        C04PacketPlayerPosition(
+                            thePlayer.posX,
+                            thePlayer.posY,
+                            thePlayer.posZ,
+                            serverOnGround
+                        )
+                    )
+                }
+            }
+
+            "c05packet" -> {
+                repeat(speed) {
+                    sendPacket(
+                        C05PacketPlayerLook(
+                            thePlayer.rotationYaw,
+                            thePlayer.rotationPitch,
+                            serverOnGround
+                        )
+                    )
+                }
+            }
+
+            "1.17grim" -> {
+                repeat(speed) {
+                    sendPacket(
+                        C06PacketPlayerPosLook(
+                            thePlayer.posX,
+                            thePlayer.posY,
+                            thePlayer.posZ,
+                            thePlayer.rotationYaw,
+                            thePlayer.rotationPitch,
+                            serverOnGround
+                        )
+                    )
                 }
             }
         }

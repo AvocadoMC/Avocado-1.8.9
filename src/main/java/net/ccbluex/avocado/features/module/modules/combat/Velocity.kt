@@ -34,13 +34,13 @@ import net.minecraft.network.play.server.S27PacketExplosion
 import net.minecraft.network.play.server.S32PacketConfirmTransaction
 import net.minecraft.util.AxisAlignedBB
 import net.minecraft.util.BlockPos
+import net.minecraft.util.*
+import net.minecraft.util.EnumFacing
 import net.minecraft.util.EnumFacing.DOWN
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
-import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.sqrt
+import kotlin.math.*
 
 object Velocity : Module("Velocity", Category.COMBAT) {
 
@@ -51,11 +51,15 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         "Mode", arrayOf(
             "Simple", "AAC", "AACPush", "AACZero", "AACv4",
             "Reverse", "SmoothReverse", "Jump", "Glitch", "Legit",
-            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce",
-            "IntaveReduce", "Delay", "GrimC03", "Hypixel", "HypixelAir",
+            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce", "KeepY",
+            "IntaveReduce", "IntaveA", "IntaveB", "Delay", "GrimC03", "GrimC07", "Hypixel", "HypixelAir",
             "Click", "BlocksMC"
         ), "Simple"
     )
+
+    // Grim 1.17
+    private val grimUseC06 = true
+    private var grimCanCancel = false
 
     private val horizontal by float("Horizontal", 0F, -1F..1F) { mode in arrayOf("Simple", "AAC", "Legit") }
     private val vertical by float("Vertical", 0F, -1F..1F) { mode in arrayOf("Simple", "Legit") }
@@ -103,7 +107,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     var delayMode = false
 
     // IntaveReduce
-    private val reduceFactor by float("Factor", 0.6f, 0.6f..1f) { mode == "IntaveReduce" }
+    private val reduceFactor by float("Factor", 0.6f, 0.6f..1f) { mode == "IntaveReduce" || mode == "IntaveA" }
     private val hurtTime by int("HurtTime", 9, 1..10) { mode == "IntaveReduce" }
 
     private val pauseOnExplosion by boolean("PauseOnExplosion", true)
@@ -133,6 +137,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     /**
      * VALUES
      */
+    private val velocityState by choices("State", arrayOf("Both", "Ground", "Air"), "Both")
     private val velocityTimer = MSTimer()
     private var hasReceivedVelocity = false
 
@@ -194,6 +199,30 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     thePlayer.motionY = 0.4
 
                 hasReceivedVelocity = false
+            }
+            "grimc07" -> {
+                if (!grimCanCancel) return@handler
+
+                if (grimUseC06) {
+                    sendPacket(
+                        C03PacketPlayer.C06PacketPlayerPosLook(
+                            thePlayer.posX, thePlayer.posY, thePlayer.posZ,
+                            thePlayer.rotationYaw, thePlayer.rotationPitch, thePlayer.onGround
+                        )
+                    )
+                } else {
+                    sendPacket(C03PacketPlayer(thePlayer.onGround))
+                }
+
+                sendPacket(
+                    C07PacketPlayerDigging(
+                        C07PacketPlayerDigging.Action.STOP_DESTROY_BLOCK,
+                        BlockPos(thePlayer),
+                        EnumFacing.DOWN
+                    )
+                )
+
+                grimCanCancel = false
             }
 
             "reverse" -> {
@@ -305,6 +334,32 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     thePlayer.motionX *= horizontal.toDouble()
                     thePlayer.motionZ *= horizontal.toDouble()
                     thePlayer.motionY *= vertical.toDouble()
+                }
+            }
+            "intavea" -> {
+                if (hasReceivedVelocity) {
+                    intaveTick++
+                    if (thePlayer.hurtTime == 2) {
+                        intaveDamageTick++
+                        if (thePlayer.onGround && intaveTick % 2 == 0 && intaveDamageTick <= 10) {
+                            thePlayer.tryJump()
+                            intaveTick = 0
+                        }
+                        hasReceivedVelocity = false
+                    }
+                }
+            }
+            "intaveb" -> {
+                val target = getNearestEntityInRange()
+                if (target != null) {
+                    if (thePlayer.hurtTime > 0) {
+                        thePlayer.isSprinting = false
+                        if (thePlayer.hurtTime <= 6) {
+                            val yaw = MathHelper.wrapAngleTo180_float(currentRotation?.yaw ?: thePlayer.rotationYaw)
+                            thePlayer.motionX = -sin(yaw * (Math.PI / 180)) * 0.02
+                            thePlayer.motionZ = cos(yaw * (Math.PI / 180)) * 0.02
+                        }
+                    }
                 }
             }
 
@@ -468,6 +523,10 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     && ((thePlayer.motionX + packet.field_149152_f) != 0.0 || (thePlayer.motionZ + packet.field_149159_h) != 0.0))
         ) {
             velocityTimer.reset()
+            when (velocityState) {
+                "Ground" -> if (!thePlayer.onGround) return@handler
+                "Air" -> if (thePlayer.onGround) return@handler
+            }
 
             if (pauseOnExplosion && packet is S27PacketExplosion && (thePlayer.motionY + packet.field_149153_g) > 0.0
                 && ((thePlayer.motionX + packet.field_149152_f) != 0.0 || (thePlayer.motionZ + packet.field_149159_h) != 0.0)
@@ -509,7 +568,23 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     if (inRange)
                         hasReceivedVelocity = true
                 }
+                "keepy" -> {
+                    if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
 
+                        event.cancelEvent()
+
+                        thePlayer.motionY = packet.motionY / 8000.0
+                    }
+                }
+                "grimc07" -> {
+                    if (packet is S12PacketEntityVelocity && thePlayer.entityId == packet.entityID) {
+                        event.cancelEvent()
+                        grimCanCancel = true
+                    } else if (packet is S27PacketExplosion) {
+                        event.cancelEvent()
+                        grimCanCancel = true
+                    }
+                }
                 "glitch" -> {
                     if (!thePlayer.onGround)
                         return@handler

@@ -14,6 +14,7 @@ import net.ccbluex.avocado.features.module.modules.player.nofallmodes.aac.AAC331
 import net.ccbluex.avocado.features.module.modules.player.nofallmodes.aac.LAAC
 import net.ccbluex.avocado.features.module.modules.player.nofallmodes.other.*
 import net.ccbluex.avocado.features.module.modules.player.nofallmodes.other.Blink
+import net.ccbluex.avocado.features.module.modules.player.nofallmodes.grim.Grim2371
 import net.ccbluex.avocado.utils.block.BlockUtils.collideBlock
 import net.ccbluex.avocado.utils.rotation.AlwaysRotationSettings
 import net.minecraft.block.BlockLiquid
@@ -38,6 +39,9 @@ object NoFall : Module("NoFall", Category.PLAYER) {
         LAAC,
         AAC3311,
         AAC3315,
+
+        // Grim
+        Grim2371,
 
         // Hypixel (Watchdog)
         Hypixel,
