@@ -125,6 +125,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             KeyPearl,
             Kick,
             KillAura,
+            WaterMark,
             LiquidWalk,
             LongJump,
             Liquids,
