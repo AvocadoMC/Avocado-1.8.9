@@ -24,7 +24,10 @@ import net.ccbluex.avocado.utils.rotation.RaycastUtils.runWithModifiedRaycastRes
 import net.ccbluex.avocado.utils.rotation.RotationUtils.currentRotation
 import net.ccbluex.avocado.utils.timing.MSTimer
 import net.minecraft.block.BlockAir
+import net.minecraft.client.gui.GuiGameOver
+import net.minecraft.client.settings.GameSettings
 import net.minecraft.entity.Entity
+import net.minecraft.entity.EntityLivingBase
 import net.minecraft.network.Packet
 import net.minecraft.network.play.client.*
 import net.minecraft.network.play.client.C07PacketPlayerDigging.Action.STOP_DESTROY_BLOCK
@@ -37,10 +40,13 @@ import net.minecraft.util.BlockPos
 import net.minecraft.util.*
 import net.minecraft.util.EnumFacing
 import net.minecraft.util.EnumFacing.DOWN
+import net.minecraft.world.WorldSettings
+import javax.vecmath.Vector2d
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
 import kotlin.math.*
+import kotlin.random.Random
 
 object Velocity : Module("Velocity", Category.COMBAT) {
 
@@ -50,9 +56,9 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val mode by choices(
         "Mode", arrayOf(
             "Simple", "AAC", "AACPush", "AACZero", "AACv4",
-            "Reverse", "SmoothReverse", "Jump", "Glitch", "Legit",
-            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce", "KeepY",
-            "IntaveReduce", "IntaveA", "IntaveB", "Delay", "GrimC03", "GrimC07", "Hypixel", "HypixelAir",
+            "Reverse", "SmoothReverse", "Jump", "Glitch", "Legit", "GrimCombat","Intave13KeepLow", "Intave13Reverse", "Intave13GommeZero", "Intave13Wall", "Intave13Old",
+            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce", "KeepY","Polar","Intave14", "intave/polar-flag","SmartJumpReset",
+            "IntaveReduce", "PredictionA", "IntaveA", "IntaveB", "Delay", "GrimC03", "GrimC07", "Hypixel", "HypixelAir",
             "Click", "BlocksMC"
         ), "Simple"
     )
@@ -63,6 +69,15 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
     private val horizontal by float("Horizontal", 0F, -1F..1F) { mode in arrayOf("Simple", "AAC", "Legit") }
     private val vertical by float("Vertical", 0F, -1F..1F) { mode in arrayOf("Simple", "Legit") }
+
+    // Intave14
+    private val intave14Timer1 by float("Intave14-Timer1", 0.3f, 0.1f..2.0f) { mode == "Intave14" }
+    private val intave14Timer2 by float("Intave14-Timer2", 5.0f, 1.0f..10.0f) { mode == "Intave14" }
+
+    // SmartJumpReset
+    private val smartJumpResetEnabled by boolean("SmartJumpReset", true) { mode == "SmartJumpReset" }
+    private val sneakReduce by boolean("SneakReduce", false) { mode == "SmartJumpReset" && smartJumpResetEnabled }
+    private val backward by boolean("Backward", false) { mode == "SmartJumpReset" && smartJumpResetEnabled }
 
     // Reverse
     private val reverseStrength by float("ReverseStrength", 1F, 0.1F..1F) { mode == "Reverse" }
@@ -77,6 +92,9 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val maxAngleDifference by float("MaxAngleDifference", 120.0f, 10.0f..360.0f) {
         onlyWhenFacing || onLook && mode in arrayOf("Reverse", "SmoothReverse")
     }
+
+    // Intave13KeepLow
+    private var wasOnGround = false
 
     // AAC Push
     private val aacPushXZReducer by float("AACPushXZReducer", 2F, 1F..3F) { mode == "AACPush" }
@@ -103,6 +121,10 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val hurtTimeRange by intRange("HurtTime", 1..9, 1..10) {
         mode == "GhostBlock"
     }
+    var polarHurtTime = Random.nextInt(8, 10)
+
+    // PredictionA
+    private val predictionAClicks by intRange("PredictionAClicks", 1..2, 1..20) { mode == "PredictionA" }
 
     // Delay
     private val spoofDelay by int("SpoofDelay", 500, 0..5000) { mode == "Delay" }
@@ -114,6 +136,24 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
     private val pauseOnExplosion by boolean("PauseOnExplosion", true)
     private val ticksToPause by int("TicksToPause", 20, 1..50) { pauseOnExplosion }
+
+    private val grimrange by float("Range", 3.5f, 0f..6f) { mode == "GrimCombat" }
+    private val attackCountValue by int("Attack Counts", 12, 1..16) { mode == "GrimCombat" }
+
+    private val fireCheckValue by boolean("FireCheck", false) { mode == "GrimCombat" }
+    private val waterCheckValue by boolean("WaterCheck", false) { mode == "GrimCombat" }
+    private val fallCheckValue by boolean("FallCheck", false) { mode == "GrimCombat" }
+    private val consumecheck by boolean("ConsumableCheck", false) { mode == "GrimCombat" }
+    private val raycastValue by boolean("Ray cast", false) { mode == "GrimCombat" }
+
+    //    Grim
+    var velocityInput: Boolean = false
+    private var attacked = false
+    private var reduceXZ = 1.00000
+    var entity: Entity? = null
+    var velX = 0
+    var velY = 0
+    var velZ = 0
 
     // TODO: Could this be useful in other modes? (Jump?)
     // Limits
@@ -184,6 +224,8 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         pauseTicks = 0
         mc.thePlayer?.speedInAir = 0.02F
         timerTicks = 0
+        //Intave14
+        mc.timer.timerSpeed = 1.0f
         reset()
     }
 
@@ -225,6 +267,49 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                 )
 
                 grimCanCancel = false
+            }
+            "intave13keeplow" -> {
+                when (thePlayer.hurtTime) {
+                    10 -> {
+                        if (thePlayer.onGround) {
+                            wasOnGround = true
+                        }
+                    }
+                    0 -> {
+                        wasOnGround = false
+                    }
+                    9 -> {
+                        if (wasOnGround) {
+                            thePlayer.motionY = 0.0
+                        }
+                    }
+                }
+            }
+            "intave13reverse" -> {
+                if (thePlayer.hurtTime > 0) {
+                    thePlayer.setSprinting(false)
+                    speed = 0.05f
+                }
+            }
+            "intave13old" -> {
+                if (thePlayer.hurtTime != 0 && thePlayer.hurtTime == 6) {
+                    speed = 0.17f
+                }
+            }
+            "intave13wall" -> {
+                val velocity = Random.nextDouble(0.3045, 0.3345).toFloat()
+                if (thePlayer.isCollidedHorizontally && !thePlayer.onGround && !thePlayer.isCollidedVertically
+                    && !thePlayer.isInWeb && !thePlayer.isInWater && !thePlayer.isInLava && thePlayer.hurtTime != 0) {
+                    speed = velocity
+                }
+            }
+            "intave13gommezero" -> {
+                if (thePlayer.hurtTime != 0) {
+                    mc.gameSettings.keyBindForward.pressed = false
+                    mc.gameSettings.keyBindBack.pressed = false
+                    mc.gameSettings.keyBindLeft.pressed = false
+                    mc.gameSettings.keyBindRight.pressed = false
+                }
             }
 
             "reverse" -> {
@@ -338,6 +423,66 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     thePlayer.motionY *= vertical.toDouble()
                 }
             }
+            "polar" -> {
+                if (thePlayer.hurtTime == polarHurtTime) {
+                    thePlayer.tryJump()
+                    polarHurtTime = nextInt(8, 10)
+                }
+            }
+            "intave14" -> {
+                when (thePlayer.hurtTime) {
+                    9 -> mc.timer.timerSpeed = intave14Timer1
+                    in 3..8 -> mc.timer.timerSpeed = intave14Timer2
+                    2 -> mc.timer.timerSpeed = 1.0f
+                    else -> mc.timer.timerSpeed = 1.0f
+                }
+            }
+            "intave/polar-flag" -> {
+                if (thePlayer.onGround && thePlayer.hurtTime >= 8) {
+                    sendPacket(
+                        C03PacketPlayer.C06PacketPlayerPosLook(
+                            thePlayer.posX + 6,
+                            thePlayer.posY + 1,
+                            thePlayer.posZ + 6,
+                            thePlayer.rotationYaw,
+                            thePlayer.rotationPitch,
+                            false
+                        )
+                    )
+                }
+            }
+            "predictiona" -> {
+                // PredictionA
+                if (hasReceivedVelocity) {
+                    // Jump
+                    if (!thePlayer.isJumping && thePlayer.isSprinting && thePlayer.onGround && thePlayer.hurtTime == 9) {
+                        thePlayer.tryJump()
+                        limitUntilJump = 0
+                    }
+                    hasReceivedVelocity = false
+                }
+            }
+            "grimcombat" -> {
+                if (attacked) {
+
+                    if (velocityInput) {
+                        mc.thePlayer.motionX = velX * reduceXZ / 8000.0
+                        mc.thePlayer.motionY = velY / 8000.0
+                        mc.thePlayer.motionZ = velZ * reduceXZ / 8000.0
+
+                        attacked = false
+                        reduceXZ = 1.0
+
+                        if (mc.thePlayer.hurtTime == 0) {
+                            velocityInput = false
+                        }
+
+                    } else if (mc.thePlayer.hurtTime > 0 && mc.thePlayer.onGround) {
+                        mc.thePlayer.addVelocity(-1.3E-10, -1.3E-10, -1.3E-10)
+                        mc.thePlayer.isSprinting = false
+                    }
+                }
+            }
             "intavea" -> {
                 if (hasReceivedVelocity) {
                     intaveTick++
@@ -360,6 +505,45 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                             val yaw = MathHelper.wrapAngleTo180_float(currentRotation?.yaw ?: thePlayer.rotationYaw)
                             thePlayer.motionX = -sin(yaw * (Math.PI / 180)) * 0.02
                             thePlayer.motionZ = cos(yaw * (Math.PI / 180)) * 0.02
+                        }
+                    }
+                }
+            }
+            "smartjumpreset" -> {
+                if (thePlayer.hurtTime > 0) {
+                    // Backward
+                    if (backward) {
+                        if (thePlayer.hurtTime > 1) {
+                            mc.gameSettings.keyBindForward.pressed = false
+                            mc.gameSettings.keyBindBack.pressed = true
+                            mc.gameSettings.keyBindJump.pressed = true
+                        } else {
+                            if (mc.currentScreen == null) {
+                                mc.gameSettings.keyBindForward.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindForward)
+                                mc.gameSettings.keyBindBack.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindBack)
+                                mc.gameSettings.keyBindJump.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindJump)
+                            }
+                        }
+                    }
+
+                    // SmartJumpReset
+                    if (smartJumpResetEnabled && thePlayer.onGround && thePlayer.hurtTime >= 8 && mc.gameSettings.keyBindForward.pressed) {
+                        thePlayer.jump()
+                        thePlayer.motionX *= (1 - 1E-7)
+                        thePlayer.motionZ *= (1 - 1E-7)
+                    }
+
+                    // SneakReduce
+                    if (sneakReduce) {
+                        when (thePlayer.hurtTime) {
+                            9 -> {
+                                sendPacket(C0BPacketEntityAction(thePlayer, C0BPacketEntityAction.Action.START_SNEAKING))
+                                sendPacket(C0BPacketEntityAction(thePlayer, C0BPacketEntityAction.Action.STOP_SNEAKING))
+                            }
+                            8 -> {
+                                thePlayer.motionX *= (1 - 1E-7)
+                                thePlayer.motionZ *= (1 - 1E-7)
+                            }
                         }
                     }
                 }
@@ -416,6 +600,29 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         val thePlayer = mc.thePlayer ?: return@handler
 
         mc.theWorld ?: return@handler
+        // PredictionA
+        if (mode == "PredictionA") {
+
+            if (thePlayer.hurtTime != 10 || thePlayer.isBlocking || KillAura.blockStatus)
+                return@handler
+
+            var target: Entity? = mc.objectMouseOver?.entityHit
+
+            if (target == null) {
+                target = getNearestEntityInRange(3f)
+                    ?.takeIf { isSelected(it, true) }
+            }
+
+            target ?: return@handler
+
+            repeat(predictionAClicks.random()) {
+                thePlayer.attackEntityWithModifiedSprint(target, true) {
+                    thePlayer.swingItem()
+                }
+            }
+
+            return@handler
+        }
 
         if (mode != "Click" || thePlayer.hurtTime != hurtTimeToClick || ignoreBlocking && (thePlayer.isBlocking || KillAura.blockStatus))
             return@handler
@@ -452,17 +659,35 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         }
     }
 
-    val onAttack = handler<AttackEvent> {
+    val onAttack = handler<AttackEvent> { event ->
         val player = mc.thePlayer ?: return@handler
 
-        if (mode != "IntaveReduce" || !hasReceivedVelocity) return@handler
+        when (mode.lowercase()) {
 
-        if (player.hurtTime == hurtTime && System.currentTimeMillis() - lastAttackTime <= 8000) {
-            player.motionX *= reduceFactor
-            player.motionZ *= reduceFactor
+            "intavereduce" -> {
+                if (player.hurtTime == hurtTime &&
+                    System.currentTimeMillis() - lastAttackTime <= 8000
+                ) {
+                    player.motionX *= reduceFactor
+                    player.motionZ *= reduceFactor
+                }
+
+                lastAttackTime = System.currentTimeMillis()
+            }
+
+            "grimcombat" -> {
+                if (attacked) {
+                    mc.netHandler.networkManager.sendPacket(C0APacketAnimation())
+
+                    mc.netHandler.networkManager.sendPacket(
+                        C02PacketUseEntity(
+                            event.targetEntity,
+                            C02PacketUseEntity.Action.ATTACK
+                        )
+                    )
+                }
+            }
         }
-
-        lastAttackTime = System.currentTimeMillis()
     }
 
     private fun checkAir(blockPos: BlockPos): Boolean {
@@ -555,9 +780,65 @@ object Velocity : Module("Velocity", Category.COMBAT) {
             }
 
             when (mode.lowercase()) {
+                "grimcombat" -> {
+                    if (mc.thePlayer.isDead) return@handler
+                    if (mc.currentScreen is GuiGameOver) return@handler
+                    if (mc.playerController.currentGameType === WorldSettings.GameType.SPECTATOR) return@handler
+                    if (mc.thePlayer.isOnLadder) return@handler
+                    if (mc.thePlayer.isBurning && fireCheckValue) return@handler
+                    if (mc.thePlayer.isInWater && waterCheckValue) return@handler
+                    if (mc.thePlayer.fallDistance > 1.5 && fallCheckValue) return@handler
+                    if (mc.thePlayer.isEating && consumecheck) return@handler
+                    if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
+                        //            chat("触发反击退但还没攻击")
+                        val s12 = (event.packet as S12PacketEntityVelocity)
+                        val horizontalStrength =
+                            Vector2d(s12.getMotionX().toDouble(), s12.getMotionZ().toDouble()).length()
+                        if (horizontalStrength <= 1000) return@handler
+                        val mouse = mc.objectMouseOver
+                        velocityInput = true
+                        var entity: Entity? = null
+                        reduceXZ = 1.0
+
+                        if (mouse.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY && mouse.entityHit is EntityLivingBase && mc.thePlayer.getDistanceToEntityBox(
+                                mouse.entityHit
+                            ) <= grimrange
+                        ) {
+                            entity = mouse.entityHit
+                        }
+
+                        if (entity == null && !raycastValue) {
+                            val target: Entity? = KillAura.target
+                            if (target != null && mc.thePlayer.getDistanceToEntityBox(target) <= grimrange) {
+                                entity = KillAura.target
+                            }
+                        }
+
+                        val state = mc.thePlayer.serverSprintState
+                        if (entity != null) {
+                            if (!state) {
+                                sendPackets(C0BPacketEntityAction(mc.thePlayer, START_SPRINTING))
+                            }
+                            val count = attackCountValue
+                            for (i in 1..count) {
+                                mc.netHandler.networkManager.sendPacket(C0APacketAnimation())
+                                mc.netHandler.networkManager.sendPacket(
+                                    C02PacketUseEntity(entity, C02PacketUseEntity.Action.ATTACK)
+                                )
+                            }
+                            if (!state) {
+                                sendPackets(C0BPacketEntityAction(mc.thePlayer, STOP_SPRINTING))
+                            }
+                            velX = event.packet.motionX
+                            velY = event.packet.motionY
+                            velZ = event.packet.motionZ
+                            attacked = true
+                            event.cancelEvent()
+                        }}}
                 "simple" -> handleVelocity(event)
 
-                "aac", "reverse", "smoothreverse", "aaczero", "ghostblock", "intavereduce" -> hasReceivedVelocity = true
+                "aac", "reverse", "smoothreverse", "aaczero", "ghostblock", "intavereduce", "intave14", "predictiona",
+                    "intavea", "intaveb", "intave/polar-flag", "smartjumpreset" -> hasReceivedVelocity = true
 
                 "jump" -> {
                     hasReceivedVelocity = true
