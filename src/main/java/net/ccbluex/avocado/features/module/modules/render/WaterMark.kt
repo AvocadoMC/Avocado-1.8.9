@@ -32,10 +32,6 @@ import kotlin.math.max
 
 object WaterMark : Module("WaterMark", Category.RENDER) {
 
-    init {
-        state = true
-    }
-
     private val ClientName by text("ClientName", "Avocado")
     private val animationSpeed by float("AnimationSpeed", 0.2F, 0.05F..1F)
 

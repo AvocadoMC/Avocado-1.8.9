@@ -24,6 +24,7 @@ import net.ccbluex.avocado.utils.render.RenderUtils.drawRect
 import net.ccbluex.avocado.utils.render.RenderUtils.drawRoundedRect
 import net.ccbluex.avocado.utils.render.RenderUtils.drawRoundedRectInt
 import net.ccbluex.avocado.utils.render.RenderUtils.withClipping
+import net.ccbluex.avocado.utils.GlowUtils
 import net.minecraft.scoreboard.ScoreObjective
 import net.minecraft.scoreboard.ScorePlayerTeam
 import net.minecraft.util.EnumChatFormatting
@@ -43,6 +44,10 @@ class ScoreboardElement(
     private val textColor by color("TextColor", Color.WHITE)
     private val backgroundColor by color("BackgroundColor", Color.BLACK.withAlpha(128))
     private val roundedRectRadius by float("Rounded-Radius", 3F, 0F..5F)
+
+    private val glow by boolean("Glow", true)
+    private val glowRadius by int("Glow-Radius", 12, 4..30) { glow }
+    private val glowAlpha by int("Glow-Alpha", 150, 50..255) { glow }
 
     private val rect by boolean("Rect", false)
     private val rectColor = color("RectangleColor", Color(0, 111, 255)) { rect }
@@ -103,6 +108,7 @@ class ScoreboardElement(
             }
 
             val maxHeight = scoreCollection.size * fontHeight
+
             val l1 = -maxWidth  - 3
 
             val inc = if (drawRectOnTitle) titleRectExtraHeight else 0
@@ -112,6 +118,11 @@ class ScoreboardElement(
             } else {
                 -7 to (abs(l1 - 4))
             }
+
+            val boxX = minX.toFloat()
+            val boxY = -(4 + inc).toFloat()
+            val boxW = (maxX - minX).toFloat()
+            val boxH = (maxHeight + fontHeight + 2).toFloat()
 
             val numberX = maxX - 7
 
@@ -126,6 +137,17 @@ class ScoreboardElement(
                     }
                 } else {
                     RenderUtils.RoundedCorners.ALL
+                }
+
+                if (glow) {
+                    GlowUtils.drawGlow(
+                        boxX,
+                        boxY,
+                        boxW,
+                        boxH,
+                        glowRadius,
+                        Color(0, 0, 0, glowAlpha)
+                    )
                 }
 
                 drawRoundedRectInt(

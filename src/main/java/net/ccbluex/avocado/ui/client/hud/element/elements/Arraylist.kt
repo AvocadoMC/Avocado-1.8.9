@@ -20,6 +20,7 @@ import net.ccbluex.avocado.ui.font.AWTFontRenderer.Companion.assumeNonVolatile
 import net.ccbluex.avocado.utils.extensions.safeDiv
 import net.ccbluex.avocado.utils.render.*
 import net.ccbluex.avocado.utils.render.ColorUtils.fade
+import net.ccbluex.avocado.utils.GlowUtils
 import net.ccbluex.avocado.utils.render.ColorUtils.withAlpha
 import net.ccbluex.avocado.utils.render.RenderUtils.deltaTime
 import net.ccbluex.avocado.utils.render.RenderUtils.drawImage
@@ -54,6 +55,11 @@ class Arraylist(
     private val textFadeDistance by int("Text-Fade-Distance", 50, 0..100) { textColorMode == "Fade" }
 
     private val gradientTextSpeed by float("Text-Gradient-Speed", 1f, 0.5f..10f) { textColorMode == "Gradient" }
+
+    private val glow by boolean("Glow", true)
+    private val glowRadius by int("Glow-Radius", 14, 4..40) { glow }
+    private val glowAlpha by int("Glow-Alpha", 140, 40..255) { glow }
+    private val glowOffset by float("Glow-Offset", 2f, 0f..6f) { glow }
 
     private val maxTextGradientColors by int(
         "Max-Text-Gradient-Colors", 4, 1..MAX_GRADIENT_COLORS
@@ -260,6 +266,7 @@ class Arraylist(
             val gradientX = 1f safeDiv gradientX
             val gradientY = 1f safeDiv gradientY
 
+
             modules.forEachIndexed { index, module ->
                 var yPos =
                     (if (side.vertical == Vertical.DOWN) -textSpacer else textSpacer) * if (side.vertical == Vertical.DOWN) index + 1 else index
@@ -278,6 +285,43 @@ class Arraylist(
 
                 val displayString = getDisplayString(module)
                 val displayStringWidth = font.getStringWidth(displayString)
+
+                if (glow) {
+
+                    val width = displayStringWidth.toFloat()
+                    val padding = 3f
+
+                    when (side.horizontal) {
+
+                        Horizontal.RIGHT, Horizontal.MIDDLE -> {
+
+                            val xPos = -module.slide - if (displayIcons) 2 else 3
+
+                            GlowUtils.drawGlow(
+                                xPos - 2f - padding,
+                                yPos - padding,
+                                width + padding * 2 + 4f,
+                                textSpacer + padding * 2,
+                                glowRadius,
+                                Color(0, 0, 0, glowAlpha)
+                            )
+                        }
+
+                        Horizontal.LEFT -> {
+
+                            val xPos = -(width - module.slide) + if (rectMode == "Left") 6 else 3
+
+                            GlowUtils.drawGlow(
+                                xPos - padding,
+                                yPos - padding,
+                                width + padding * 2 + 4f,
+                                textSpacer + padding * 2,
+                                glowRadius,
+                                Color(0, 0, 0, glowAlpha)
+                            )
+                        }
+                    }
+                }
 
                 val previousDisplayString = getDisplayString(modules[(if (index > 0) index else 1) - 1])
                 val previousDisplayStringWidth = font.getStringWidth(previousDisplayString)

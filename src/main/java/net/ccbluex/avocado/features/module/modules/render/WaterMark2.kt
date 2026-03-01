@@ -14,6 +14,10 @@ import java.awt.Color
 
 object WaterMark2 : Module("WaterMark2", Category.RENDER) {
 
+    init {
+        state = true
+    }
+
     private val bgAlpha = 130
     private val radius = 16f
 
