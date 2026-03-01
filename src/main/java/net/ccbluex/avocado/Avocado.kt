@@ -10,7 +10,6 @@ import kotlinx.coroutines.launch
 import net.ccbluex.avocado.api.ClientUpdate
 import net.ccbluex.avocado.api.ClientUpdate.gitInfo
 import net.ccbluex.avocado.api.loadSettings
-import net.ccbluex.avocado.cape.CapeService
 import net.ccbluex.avocado.event.ClientShutdownEvent
 import net.ccbluex.avocado.event.EventManager
 import net.ccbluex.avocado.event.StartupEvent
@@ -158,7 +157,6 @@ object Avocado {
             RotationUtils
             ClientFixes
             BungeeCordSpoof
-            CapeService
             InventoryUtils
             InventoryManager
             MiniMapRegister
@@ -212,24 +210,6 @@ object Avocado {
 
             // Disable Optifine FastRender
             disableFastRender()
-
-            // Login into known token if not empty
-            if (CapeService.knownToken.isNotBlank()) {
-                SharedScopes.IO.launch {
-                    runCatching {
-                        CapeService.login(CapeService.knownToken)
-                    }.onFailure {
-                        LOGGER.error("Failed to login into known cape token.", it)
-                    }.onSuccess {
-                        LOGGER.info("Successfully logged in into known cape token.")
-                    }
-                }
-            }
-
-            // Refresh cape service
-            CapeService.refreshCapeCarriers {
-                LOGGER.info("Successfully loaded ${it.size} cape carriers.")
-            }
 
         } catch (e: Exception) {
             LOGGER.error("Failed to start client: ${e.message}")

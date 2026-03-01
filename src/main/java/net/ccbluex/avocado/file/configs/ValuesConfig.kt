@@ -9,7 +9,6 @@ import com.google.gson.JsonObject
 import net.ccbluex.avocado.Avocado
 import net.ccbluex.avocado.Avocado.commandManager
 import net.ccbluex.avocado.Avocado.moduleManager
-import net.ccbluex.avocado.cape.CapeService
 import net.ccbluex.avocado.features.special.ClientFixes
 import net.ccbluex.avocado.file.FileConfig
 import net.ccbluex.avocado.file.FileManager
@@ -42,13 +41,6 @@ class ValuesConfig(file: File) : FileConfig(file) {
 
                 key.equals(ClientFixes.name, true) -> {
                     ClientFixes.fromJson(value)
-                }
-
-                key.equals("DonatorCape", true) -> {
-                    val jsonValue = value as JsonObject
-                    if (jsonValue.has("TransferCode")) {
-                        CapeService.knownToken = jsonValue["TransferCode"].asString
-                    }
                 }
 
                 key.equals(ClientConfiguration.name, true) -> {
