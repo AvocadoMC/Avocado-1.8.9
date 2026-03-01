@@ -34,7 +34,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val swordMode by choices(
         "SwordMode",
-        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "Grim2371"),
+        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "Grim2371", "Grim30"),
         "None"
     )
 
@@ -45,7 +45,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val consumeMode by choices(
         "ConsumeMode",
-        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "Drop", "Grim2371"),
+        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "Drop", "Polar", "Polar2", "Grim2371"),
         "None"
     )
 
@@ -84,6 +84,13 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
     private var grim2371DoNotSlow = false
     private val grim2371Timer = TickTimer()
 
+    private var lastUsingRestItem = false
+
+    // Grim30
+    private var ticksGrim30 = 0
+    private var onGroundTickCounter = 0
+    private var offGroundTickCounter = 0
+
     override fun onDisable() {
         shouldSwap = false
         shouldBlink = true
@@ -91,6 +98,12 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
         BlinkUtils.unblink()
         grim2371DoNotSlow = false
         grim2371Timer.reset()
+        lastUsingRestItem = false
+
+        //Grim30
+        ticksGrim30 = 0
+        onGroundTickCounter = 0
+        offGroundTickCounter = 0
     }
 
     val onMotion = handler<MotionEvent> { event ->
@@ -127,6 +140,28 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
         if (!isUsingItem && grim2371DoNotSlow) {
             grim2371DoNotSlow = false
         }
+
+        // Grim30
+        if (swordMode == "Grim30" && player.isUsingItem) {
+            ticksGrim30++
+
+            if (!player.onGround && !mc.gameSettings.keyBindRight.isKeyDown && !mc.gameSettings.keyBindLeft.isKeyDown) {
+                player.rotationYaw += 45f
+            }
+
+            if (player.isInWeb) {
+                player.motionX *= 0.64
+                player.motionZ *= 0.64
+            }
+
+            if (onGroundTickCounter > 1 && !mc.gameSettings.keyBindJump.isKeyDown) {
+                player.motionX *= 1.0002
+                player.motionZ *= 1.0002
+            }
+        } else if (swordMode == "Grim30") {
+            ticksGrim30 = 0
+        }
+
 
         if (swordMode == "Grim2371" && heldItem.item is ItemSword && isUsingItem) {
             if (event.eventState == EventState.PRE) {
@@ -209,6 +244,30 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
                                     sendPacket(C08PacketPlayerBlockPlacement(BlockPos(-1, -1, -1), 1, null, 0f, 0f, 0f))
                             }
                         }
+                    }
+
+                    "Polar" -> {
+                        if (!lastUsingRestItem) {
+                            sendPacket(C07PacketPlayerDigging(
+                                C07PacketPlayerDigging.Action.RELEASE_USE_ITEM,
+                                BlockPos.ORIGIN,
+                                EnumFacing.UP
+                            ))
+                        }
+                        sendPacket(C0CPacketInput(0f, 0.82f, false, false))
+                        lastUsingRestItem = true
+                    }
+                    "Polar2" -> {
+                        if (player.itemInUseCount == 1) {
+                            sendPacket(C0CPacketInput(0f, 1f, false, false))
+                            sendPacket(C07PacketPlayerDigging(
+                                C07PacketPlayerDigging.Action.RELEASE_USE_ITEM,
+                                BlockPos.ORIGIN,
+                                EnumFacing.UP
+                            ))
+                        }
+                    }
+                    "Grim30" -> {
                     }
 
                     "intave" -> {
@@ -408,6 +467,33 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
                 grim2371DoNotSlow = false
                 return@handler
             }
+            // Grim30
+            if (swordMode == "Grim30" && mc.thePlayer.isUsingItem) {
+                mc.thePlayer.motionX *= 1.0001
+                mc.thePlayer.motionZ *= 1.0001
+
+                if (onGroundTickCounter == 1 ||
+                    (offGroundTickCounter % 2 == 0 && !mc.thePlayer.onGround) ||
+                    (onGroundTickCounter % 2 == 1 && mc.thePlayer.onGround)) {
+                    event.forward = getMultiplier(heldItem, true)
+                    event.strafe = getMultiplier(heldItem, false)
+                }
+                return@handler
+            }
+
+            if (heldItem !is ItemSword) {
+                if (!consumeFoodOnly && heldItem is ItemFood ||
+                    !consumeDrinkOnly && (heldItem is ItemPotion || heldItem is ItemBucketMilk)
+                ) {
+                    return@handler
+                }
+
+                if (consumeMode == "Drop" && !shouldNoSlow)
+                    return@handler
+            }
+
+            event.forward = getMultiplier(heldItem, true)
+            event.strafe = getMultiplier(heldItem, false)
         }
 
         if (heldItem !is ItemSword) {

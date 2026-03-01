@@ -64,6 +64,8 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             AutoSoup,
             AutoTool,
             AutoWeapon,
+            AugustusVelocity,
+            AugustusNoslow,
             AvoidHazards,
             Backtrack,
             BedDefender,
